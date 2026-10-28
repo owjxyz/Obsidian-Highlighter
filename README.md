@@ -1,79 +1,61 @@
 # Superior Highlighter
 
-Highlight exactly what you select in Obsidian Reading View. Matches the selected text together with the text before and after it, then saves native `==🔴text==` highlights.
+Highlight exactly what you select in Obsidian Reading View, using surrounding text to find the right place. Saves native highlights such as `==🔴text==`.
 
-**Author:** [WooJIN OH (owjxyz)](https://github.com/owjxyz)
+[GitHub repository](https://github.com/owjxyz/Obsidian-Superior-Highlighter) · [Obsidian community listing](https://community.obsidian.md/plugins/superior-highlighter) · By [WooJIN OH (owjxyz)](https://github.com/owjxyz)
 
-[GitHub repository](https://github.com/owjxyz/Obsidian-Superior-Highlighter) · [Obsidian community listing](https://community.obsidian.md/plugins/superior-highlighter)
+[KOREAN](README.ko.md) · [ENGLISH](README.md)
 
-[KOREAN](README.ko.md)
+## Features
 
-## Install
+- **Precise selections.** Highlight part of a sentence, list item, or table cell while preserving surrounding text and colours.
+- **Native colours.** Use the floating toolbar or assign shortcuts for six colours, including inside footnote previews.
+- **Highlight management.** Search, recolour, remove, merge, convert older HTML highlights, and undo from the current-note navigator.
 
-In Obsidian, open **Settings → Community plugins → Browse**, search for **Superior Highlighter**, then install and enable it. You can also open its [community listing](https://community.obsidian.md/plugins/superior-highlighter).
+## Install and use
 
-For the terminal installer, follow the instructions below.
+1. Open **Settings → Community plugins → Browse**, search for **Superior Highlighter**, and install and enable it.
+2. Select text in **Reading View** and choose a toolbar action.
+3. To use shortcuts, assign keys under **Settings → Hotkeys → Superior Highlighter**.
 
-Close Obsidian, open a terminal in your vault folder, and run:
+Manual installation: copy `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/owjxyz/Obsidian-Superior-Highlighter/releases/latest) into `<vault>/.obsidian/plugins/superior-highlighter/`, then enable the plugin.
 
-**macOS (Terminal)**
+<details>
+<summary>Terminal installation and updates</summary>
+
+Requires Python 3.9+. Close Obsidian and run from your vault folder:
+
+**macOS**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | python3 -
 ```
 
-**Windows (PowerShell)**
+**Windows PowerShell**
 
 ```powershell
 curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | py -3 -
 ```
 
-Use `curl.exe` explicitly: Windows PowerShell 5.1 aliases `curl` to `Invoke-WebRequest`, which does not accept `-fsSL`. If `py` is unavailable but `python --version` reports Python 3.9+, replace `py -3 -` with `python -`.
+Use `curl.exe`: PowerShell 5.1 aliases `curl` to a different command. If `py` is unavailable, use `python -` with Python 3.9+. To target another vault, append its quoted path after `python3 -` or `py -3 -`, for example `python3 - "/Users/you/Obsidian Vault"` or `py -3 - "C:\Users\you\Obsidian Vault"`.
 
-- An optional vault path can be added after `python3 -` (macOS) or `py -3 -` (Windows). Quote paths containing spaces, for example `python3 - "/Users/you/Obsidian Vault"` or `py -3 - "C:\Users\you\Documents\Obsidian Vault"` at the end of the command.
-- Requires Python 3.9+. Resolves the latest stable release on every run and verifies checksums for all three release files.
-- Backs up changed files, preserves other settings, and migrates Reader Highlighter Tags plugin settings. The old plugin is disabled; its files stay in place.
-- Does not add or change shortcuts. Apply personal shortcuts through [Obsidian Vault Init](https://github.com/owjxyz/Obsidian-Vault-Init).
-- Existing Superior Highlighter settings are preserved.
-- Updates happen when you run the script; it does not install a background updater. Preview releases are excluded. If release lookup or verification fails, the vault stays unchanged.
+The installer downloads the latest stable release, verifies checksums, and backs up changed files. Existing settings are preserved; Reader Highlighter Tags settings are migrated and that plugin is disabled, with its files retained. Shortcuts stay unchanged; personal presets are available through [Obsidian Vault Init](https://github.com/owjxyz/Obsidian-Vault-Init). Run the installer again to update. It excludes preview releases and leaves the vault unchanged if lookup or verification fails.
 
-Manual installation: download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/owjxyz/Obsidian-Superior-Highlighter/releases/latest), place them in `.obsidian/plugins/superior-highlighter/`, then enable **Superior Highlighter**.
+</details>
 
-## Shortcuts
+## Good to know
 
-Assign your preferred keys to colour and removal commands in **Settings → Hotkeys → Superior Highlighter**. Select text in Reading View and press the assigned shortcut.
-
-**Colour highlight shortcuts:** if a highlight contains the selection and already has the requested colour, the entire highlight is removed. A different colour recolours only the selection, keeping surrounding colours intact. Unhighlighted text receives the requested colour. This rule applies separately to each selected line or cell.
-
-The generic highlight toggle shortcut removes a containing highlight regardless of its colour, or highlights the selection if none contains it.
-
-Toolbar colour buttons recolour only the selected part. The remove button and removal command erase only the selected part, keeping surrounding highlights intact.
-
-## Selection behaviour
-
-- Partial first/last lines and table cells remain partial. Text outside the selection keeps its colour.
-- Surrounding text, repeated-paragraph order, and visible occurrence counts must agree. Ambiguous or stale selections leave the note unchanged.
-- A selection spanning an embedded note is refused. Select inside one note at a time.
-- Partial link labels and partial inline-code spans are refused rather than expanded. Select their complete visible text.
-- Unrecognized rendered syntax may be refused. Smart paragraph selection deliberately selects a full block when enabled; it is off by default.
-
-## Highlight management
-
-The current-note navigator supports search, colour editing, individual and full-note removal, merging adjacent highlights, bulk recolouring, conversion of older HTML highlights, and undoing the last change.
-
-Tag management, footnote annotations, quote copying, global research, exports, PDF support, and reading progress have been removed. Tags, footnotes, and quotes already stored in notes remain intact. Only supported highlight options are loaded from older plugin settings.
+- **Shortcut toggles:** the same colour removes the entire containing highlight; a different colour recolours only the selection. The generic highlight toggle removes a containing highlight of any colour. Toolbar colour and removal buttons affect only the selection. These rules apply separately to each selected line or cell.
+- **Selection limits:** select the complete visible text of a link or inline-code span, and stay within one note when selecting across embeds. Ambiguous, stale, or unrecognized selections are left unchanged.
+- **Smart paragraph selection** selects a full block when enabled; it is off by default.
+- **Older notes:** stored tags, footnotes, and quotes remain intact. Tag management, footnote annotation creation, quote copying, global research, exports, PDF support, and reading progress are no longer included. Only supported highlight settings are loaded.
 
 ## Data access
 
-The plugin reads and edits the note containing the selection, including the source of an embedded note. It does not scan the vault or process PDFs. **Copy** in the highlight navigator writes only the chosen item's text to the system clipboard; existing clipboard contents are not read. Note contents, file paths, and clipboard contents are not sent to a server.
+The plugin reads and edits the selected note, including an embed's source. It does not scan the vault or process PDFs. Navigator **Copy** writes only the chosen item's text to the clipboard and never reads existing clipboard contents. No note contents, file paths, or clipboard data are sent to a server.
 
-## Release verification
-
-The release workflow builds and tests main-branch updates and version tags in GitHub Actions, checks their committed checksums, and generates GitHub artifact attestations for `main.js`, `manifest.json`, and `styles.css`. Only a version tag prepares a release draft using those same files; publishing remains a separate, deliberate step. Manually running **Verify release provenance** builds and attests the selected ref without creating a release when that ref is a branch.
-
-For a release produced by this workflow, download its assets and verify their build provenance with `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter` (repeat for `manifest.json` and `styles.css`). `SHA256SUMS` remains an extra release asset for the terminal installer; Obsidian does not download it. Existing releases are not changed by adding the workflow.
-
-## Develop
+<details>
+<summary>Development and release verification</summary>
 
 Requires Node.js and Python:
 
@@ -86,8 +68,14 @@ python3 test_metadata.py
 python3 test_install.py
 ```
 
-On Windows PowerShell, use `py -3 test_metadata.py` and `py -3 test_install.py` for the last two commands (or `python` instead of `py -3` if configured as described above). The `npm` commands are the same on both platforms.
+On Windows, use `py -3` or `python` instead of `python3`.
 
-## Credits
+GitHub Actions builds and tests main-branch updates and version tags, verifies committed checksums, and attests `main.js`, `manifest.json`, and `styles.css`. Tags prepare a release draft; publication is separate. A manual branch run only builds and attests files.
 
-Derived from [Reader Highlighter Tags](https://github.com/DuckTapeKiller/obsidian-reader-highlighter-tags) by DuckTapeKiller, under the [MIT license](LICENSE). Superior Highlighter is an independent fork maintained by WooJIN OH (owjxyz).
+Verify a downloaded asset with `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter` (repeat for `manifest.json` and `styles.css`). `SHA256SUMS` is an additional asset for the terminal installer; Obsidian does not download it. Existing releases are not changed by this workflow.
+
+</details>
+
+## License
+
+[MIT](LICENSE). An independent fork of [Reader Highlighter Tags](https://github.com/DuckTapeKiller/obsidian-reader-highlighter-tags) by DuckTapeKiller, maintained by WooJIN OH (owjxyz).
