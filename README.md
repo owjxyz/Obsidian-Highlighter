@@ -72,7 +72,7 @@ On Windows, use `py -3` or `python` instead of `python3`.
 
 GitHub Actions builds and tests main-branch updates and version tags, verifies committed checksums, and attests `main.js`, `manifest.json`, and `styles.css`. Tags prepare a release draft; publication is separate. A manual branch run only builds and attests files.
 
-Verify a downloaded asset with `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter` (repeat for `manifest.json` and `styles.css`). `SHA256SUMS` is an additional asset for the terminal installer; Obsidian does not download it. Existing releases are not changed by this workflow.
+Verify a downloaded asset with `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter` (repeat for `manifest.json` and `styles.css`). Only these three files are attached to releases. The terminal installer verifies downloads against the SHA-256 digests provided by the GitHub Releases API; `SHA256SUMS` remains in the repository for CI verification. Existing releases are not changed by this workflow.
 
 </details>
 

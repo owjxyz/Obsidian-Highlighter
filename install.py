@@ -58,19 +58,18 @@ def install(vault):
     if not isinstance(tag, str) or not tag or release.get("draft") or release.get("prerelease"):
         raise ValueError("No stable release is available.")
     version = tag.removeprefix("v")
-    names = {asset["name"] for asset in release.get("assets", [])}
-    if not {*ASSETS, "SHA256SUMS"}.issubset(names):
-        raise ValueError("The latest release is missing required files or checksums.")
+    checksums = {asset["name"]: asset.get("digest") for asset in release.get("assets", [])}
+    if not set(ASSETS).issubset(checksums):
+        raise ValueError("The latest release is missing required files.")
+    for name in ASSETS:
+        digest = checksums[name]
+        if not isinstance(digest, str) or len(digest) != 71 or not digest.startswith("sha256:") or any(c not in "0123456789abcdef" for c in digest[7:]):
+            raise ValueError(f"Missing or invalid SHA-256 digest: {name}.")
     base = f"https://github.com/{REPOSITORY}/releases/download/{quote(tag, safe='')}/"
-    checksums = {}
-    for line in download(base + "SHA256SUMS").decode("utf-8").splitlines():
-        if line.strip():
-            digest, name = line.split(maxsplit=1)
-            checksums[name.lstrip(" *")] = digest
     updates = {}
     for name in ASSETS:
         content = download(base + name)
-        if hashlib.sha256(content).hexdigest() != checksums.get(name):
+        if "sha256:" + hashlib.sha256(content).hexdigest() != checksums[name]:
             raise ValueError(f"Checksum mismatch: {name}. No settings were changed.")
         if name == "manifest.json":
             metadata = json.loads(content)

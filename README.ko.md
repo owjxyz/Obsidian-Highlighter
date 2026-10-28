@@ -72,7 +72,7 @@ Windows에서는 `python3` 대신 `py -3` 또는 `python`을 사용합니다.
 
 GitHub Actions는 main 브랜치 변경과 버전 태그를 빌드·검사하고, 저장소의 체크섬을 확인한 뒤 `main.js`, `manifest.json`, `styles.css`의 빌드 출처를 증명합니다. 태그는 릴리즈 초안을 준비하며, 공개는 별도로 진행합니다. 브랜치에서 수동 실행하면 빌드와 출처 증명만 수행합니다.
 
-배포 파일은 `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter`로 검증할 수 있습니다(`manifest.json`, `styles.css`도 동일). `SHA256SUMS`는 터미널 설치 프로그램용 추가 파일이며 Obsidian은 내려받지 않습니다. 이 자동화는 기존 릴리즈를 변경하지 않습니다.
+배포 파일은 `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter`로 검증할 수 있습니다(`manifest.json`, `styles.css`도 동일). 릴리즈에는 이 세 파일만 첨부합니다. 터미널 설치 프로그램은 GitHub Releases API의 SHA-256 값으로 다운로드를 검증하며, `SHA256SUMS`는 CI 검증용으로 저장소에만 유지합니다. 이 자동화는 기존 릴리즈를 변경하지 않습니다.
 
 </details>
 
