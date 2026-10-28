@@ -2,7 +2,7 @@
 
 Highlight exactly what you select in Obsidian Reading View, using surrounding text to find the right place. Saves native highlights such as `==🔴text==`.
 
-[GitHub repository](https://github.com/owjxyz/Obsidian-Superior-Highlighter) · [Obsidian community listing](https://community.obsidian.md/plugins/superior-highlighter) · By [WooJIN OH (owjxyz)](https://github.com/owjxyz)
+[GitHub repository](https://github.com/owjxyz/Obsidian-Highlighter) · [Obsidian community listing](https://community.obsidian.md/plugins/superior-highlighter) · By [WooJIN OH (owjxyz)](https://github.com/owjxyz)
 
 [KOREAN](README.ko.md) · [ENGLISH](README.md)
 
@@ -18,7 +18,7 @@ Highlight exactly what you select in Obsidian Reading View, using surrounding te
 2. Select text in **Reading View** and choose a toolbar action.
 3. To use shortcuts, assign keys under **Settings → Hotkeys → Superior Highlighter**.
 
-Manual installation: copy `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/owjxyz/Obsidian-Superior-Highlighter/releases/latest) into `<vault>/.obsidian/plugins/superior-highlighter/`, then enable the plugin.
+Manual installation: copy `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/owjxyz/Obsidian-Highlighter/releases/latest) into `<vault>/.obsidian/plugins/superior-highlighter/`, then enable the plugin.
 
 <details>
 <summary>Terminal installation and updates</summary>
@@ -28,13 +28,13 @@ Requires Python 3.9+. Close Obsidian and run from your vault folder:
 **macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | python3 -
+curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Highlighter/main/install.py | python3 -
 ```
 
 **Windows PowerShell**
 
 ```powershell
-curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | py -3 -
+curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Highlighter/main/install.py | py -3 -
 ```
 
 Use `curl.exe`: PowerShell 5.1 aliases `curl` to a different command. If `py` is unavailable, use `python -` with Python 3.9+. To target another vault, append its quoted path after `python3 -` or `py -3 -`, for example `python3 - "/Users/you/Obsidian Vault"` or `py -3 - "C:\Users\you\Obsidian Vault"`.
@@ -72,7 +72,7 @@ On Windows, use `py -3` or `python` instead of `python3`.
 
 GitHub Actions builds and tests main-branch updates and version tags, verifies committed checksums, and attests `main.js`, `manifest.json`, and `styles.css`. Tags prepare a release draft; publication is separate. A manual branch run only builds and attests files.
 
-Verify a downloaded asset with `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter` (repeat for `manifest.json` and `styles.css`). Only these three files are attached to releases. The terminal installer verifies downloads against the SHA-256 digests provided by the GitHub Releases API; `SHA256SUMS` remains in the repository for CI verification. Existing releases are not changed by this workflow.
+Verify a downloaded asset with `gh attestation verify main.js --repo owjxyz/Obsidian-Highlighter` (repeat for `manifest.json` and `styles.css`). Only these three files are attached to releases. The terminal installer verifies downloads against the SHA-256 digests provided by the GitHub Releases API; `SHA256SUMS` remains in the repository for CI verification. Existing releases are not changed by this workflow.
 
 </details>
 
