@@ -2,7 +2,7 @@
 
 Obsidian 읽기 보기에서 선택한 부분을 정확하게 하이라이트합니다. 앞뒤 문맥으로 위치를 확인하고 `==🔴텍스트==` 같은 기본 하이라이트 형식으로 저장합니다.
 
-[GitHub 저장소](https://github.com/owjxyz/Obsidian-Superior-Highlighter) · [Obsidian 커뮤니티 등록 페이지](https://community.obsidian.md/plugins/superior-highlighter) · 개발자 [WooJIN OH (owjxyz)](https://github.com/owjxyz)
+[GitHub 저장소](https://github.com/owjxyz/Obsidian-Highlighter) · [Obsidian 커뮤니티 등록 페이지](https://community.obsidian.md/plugins/superior-highlighter) · 개발자 [WooJIN OH (owjxyz)](https://github.com/owjxyz)
 
 [KOREAN](README.ko.md) · [ENGLISH](README.md)
 
@@ -18,7 +18,7 @@ Obsidian 읽기 보기에서 선택한 부분을 정확하게 하이라이트합
 2. **읽기 보기**에서 텍스트를 선택하고 툴바의 기능을 누릅니다.
 3. 단축키는 **설정 → 단축키 → Superior Highlighter**에서 지정합니다.
 
-수동 설치: [최신 배포](https://github.com/owjxyz/Obsidian-Superior-Highlighter/releases/latest)의 `main.js`, `manifest.json`, `styles.css`를 `<vault>/.obsidian/plugins/superior-highlighter/`에 넣고 플러그인을 활성화합니다.
+수동 설치: [최신 배포](https://github.com/owjxyz/Obsidian-Highlighter/releases/latest)의 `main.js`, `manifest.json`, `styles.css`를 `<vault>/.obsidian/plugins/superior-highlighter/`에 넣고 플러그인을 활성화합니다.
 
 <details>
 <summary>터미널 설치와 업데이트</summary>
@@ -28,13 +28,13 @@ Python 3.9 이상이 필요합니다. Obsidian을 종료하고 대상 보관함 
 **macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | python3 -
+curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Highlighter/main/install.py | python3 -
 ```
 
 **Windows PowerShell**
 
 ```powershell
-curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | py -3 -
+curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Highlighter/main/install.py | py -3 -
 ```
 
 PowerShell 5.1의 `curl`은 다른 명령어의 별칭이므로 `curl.exe`를 사용합니다. `py`가 없으면 Python 3.9 이상에서 `python -`로 바꿉니다. 다른 보관함에 적용하려면 `python3 -` 또는 `py -3 -` 뒤에 경로를 따옴표로 감싸 추가합니다. 예: `python3 - "/Users/you/Obsidian Vault"` 또는 `py -3 - "C:\Users\you\Obsidian Vault"`.
@@ -72,7 +72,7 @@ Windows에서는 `python3` 대신 `py -3` 또는 `python`을 사용합니다.
 
 GitHub Actions는 main 브랜치 변경과 버전 태그를 빌드·검사하고, 저장소의 체크섬을 확인한 뒤 `main.js`, `manifest.json`, `styles.css`의 빌드 출처를 증명합니다. 태그는 릴리즈 초안을 준비하며, 공개는 별도로 진행합니다. 브랜치에서 수동 실행하면 빌드와 출처 증명만 수행합니다.
 
-배포 파일은 `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter`로 검증할 수 있습니다(`manifest.json`, `styles.css`도 동일). `SHA256SUMS`는 터미널 설치 프로그램용 추가 파일이며 Obsidian은 내려받지 않습니다. 이 자동화는 기존 릴리즈를 변경하지 않습니다.
+배포 파일은 `gh attestation verify main.js --repo owjxyz/Obsidian-Highlighter`로 검증할 수 있습니다(`manifest.json`, `styles.css`도 동일). 릴리즈에는 이 세 파일만 첨부합니다. 터미널 설치 프로그램은 GitHub Releases API의 SHA-256 값으로 다운로드를 검증하며, `SHA256SUMS`는 CI 검증용으로 저장소에만 유지합니다. 이 자동화는 기존 릴리즈를 변경하지 않습니다.
 
 </details>
 
