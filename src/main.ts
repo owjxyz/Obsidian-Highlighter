@@ -351,7 +351,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
         return selection.getRangeAt(0).cloneRange();
     }
 
-    getAllowedBlocksInRange(range: Range, root: HTMLElement) {
+    getAllowedBlocksInRange(range: Range | null, root: HTMLElement) {
         if (!root) return [];
         const selector = Array.from(SMART_SELECTION_TAGS)
             .map((tag) => tag.toLowerCase())
@@ -359,6 +359,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
         const blocks = Array.from(root.querySelectorAll<HTMLElement>(selector)).filter((element) => {
             const text = this.getElementText(element);
             if (!text) return false;
+            if (!range) return true;
             try {
                 if (!range.intersectsNode(element)) return false;
                 const portion = this.intersectRangeWithBlock(range, element);
@@ -369,13 +370,19 @@ export default class ReadingHighlighterPlugin extends Plugin {
         });
         // A paragraph inside a list item belongs to that item, but a nested
         // item owns a separate source block and must keep its own anchor.
-        return blocks.filter(
-            (element) =>
-                !blocks.some(
-                    (other) =>
-                        other !== element && other.contains(element) && other.closest("li") === element.closest("li")
-                )
-        );
+        // Multiple paragraphs in one item also need independent source anchors.
+        const hasMultipleParagraphs = (element: HTMLElement) =>
+            element.tagName === "LI" &&
+            Array.from(element.children).filter((child) => child.tagName === "P").length > 1;
+        const eligible = new Set(blocks.filter((element) => !hasMultipleParagraphs(element)));
+        return blocks.filter((element) => {
+            if (!eligible.has(element)) return false;
+            const list = element.closest("li");
+            for (let parent = element.parentElement; parent && parent !== root; parent = parent.parentElement) {
+                if (eligible.has(parent) && parent.closest("li") === list) return false;
+            }
+            return true;
+        });
     }
 
     getClosestAllowedBlock(node: Node, root: HTMLElement): HTMLElement | null {
@@ -444,8 +451,11 @@ export default class ReadingHighlighterPlugin extends Plugin {
         if (!scope) return -1;
         if (hint && scope.footnoteId) hint.footnoteId = scope.footnoteId;
         const contextText = this.getElementText(contextElement);
-        const matching = [...scope.root.querySelectorAll<HTMLElement>(contextElement.tagName.toLowerCase())].filter(
-            (element) => this.getElementText(element) === contextText
+        const kind = kindForElement(contextElement);
+        const matching = this.getAllowedBlocksInRange(null, scope.root).filter(
+            (element) =>
+                this.getElementText(element) === contextText &&
+                (kindForElement(element) === kind || (kind === "paragraph" && kindForElement(element) === "footnote"))
         );
         if (hint) hint.blockTotal = matching.length;
         return matching.indexOf(contextElement);

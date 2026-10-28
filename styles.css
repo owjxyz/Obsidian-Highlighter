@@ -25,6 +25,11 @@ body .reading-highlighter-float-container {
     overflow: visible;
 }
 
+/* Override the popover's width rule for its direct children. */
+.popover.hover-popover > .reading-highlighter-float-container {
+    width: max-content;
+}
+
 body.is-phone .reading-highlighter-float-container {
     background-color: var(--menu-background);
     border: var(--menu-border-width) solid var(--menu-border-color);

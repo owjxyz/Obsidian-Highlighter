@@ -392,19 +392,21 @@ var FloatingManager = class {
         text: snippet,
         range: range.cloneRange()
       };
-      this.show(rect);
+      this.show(rect, scope.footnoteId ? scope.root.closest(".hover-popover") : null);
     } else {
       this._selectionSnapshot = null;
       this.hide();
     }
   }
-  show(rect) {
+  show(rect, parent = null) {
     var _a;
     if (!this.containerEl || !rect) return;
     if (this.containerEl.ownerDocument !== this.targetDocument()) {
       this.refresh();
       if (!this.containerEl) return;
     }
+    const host = parent != null ? parent : this.containerEl.ownerDocument.body;
+    if (this.containerEl.parentElement !== host) host.appendChild(this.containerEl);
     const pos = this.plugin.settings.toolbarPosition || "text";
     const vertical = pos === "left" || pos === "right";
     this.containerEl.setCssStyles({ display: "flex", top: "", bottom: "", left: "", right: "", transform: "" });
@@ -443,14 +445,19 @@ var FloatingManager = class {
   hide() {
     if (this.containerEl) {
       this.containerEl.setCssStyles({ display: "none" });
+      const body = this.containerEl.ownerDocument.body;
+      if (this.containerEl.parentElement !== body) body.appendChild(this.containerEl);
     }
   }
 };
 
 // src/utils/sourceBlocks.ts
 function kindForElement(element) {
+  var _a;
   if (!element) return null;
   if (element.matches("li[data-footnote-id]")) return "footnote";
+  if (element.tagName === "P" && ((_a = element.parentElement) == null ? void 0 : _a.tagName) === "LI" && element === element.parentElement.firstElementChild)
+    return element.parentElement.matches("[data-footnote-id]") ? "footnote" : "list";
   const upper = element.tagName.toUpperCase();
   if (/^H[1-6]$/.test(upper)) return "heading";
   if (upper === "LI") return "list";
@@ -545,6 +552,7 @@ function splitSourceBlocks(text, offset = 0) {
       blockStart = lineStart;
       blockEnd = contentEnd;
       blockKind = (_a = ownBlockKind(line)) != null ? _a : "paragraph";
+      if (blockKind === "heading" || THEMATIC_BREAK_RE.test(line)) flush();
     } else if (blockStart === -1) {
       blockStart = lineStart;
       blockEnd = contentEnd;
@@ -565,19 +573,284 @@ function findBlockAt(blocks, position) {
   return null;
 }
 
+// src/utils/highlights.ts
+function detectNewline(raw) {
+  return raw.includes("\r\n") ? "\r\n" : "\n";
+}
+function fencedLines(lines) {
+  var _a, _b;
+  const result = [];
+  let fence = null;
+  for (const line of lines) {
+    const marker = (_b = (_a = line.match(/^[ \t]{0,3}(?:>[ \t]?)*(`{3,}|~{3,})/)) == null ? void 0 : _a[1]) != null ? _b : null;
+    if (fence === null) {
+      if (marker) fence = marker;
+      result.push(fence !== null);
+    } else {
+      result.push(true);
+      if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+    }
+  }
+  return result;
+}
+function extractStyleAttribute(openTag) {
+  var _a;
+  const styleMatch = openTag.match(/\sstyle=(["'])([\s\S]*?)\1/i);
+  if (!styleMatch) return null;
+  return {
+    quote: styleMatch[1],
+    value: styleMatch[2],
+    index: (_a = styleMatch.index) != null ? _a : -1,
+    length: styleMatch[0].length
+  };
+}
+function extractBackgroundFromStyle(styleValue) {
+  if (!styleValue) return null;
+  const parts = styleValue.split(";").map((part) => part.trim()).filter(Boolean);
+  for (const part of parts) {
+    const colon = part.indexOf(":");
+    if (colon === -1) continue;
+    const key = part.slice(0, colon).trim().toLowerCase();
+    const value = part.slice(colon + 1).trim();
+    if (key === "background" || key === "background-color") {
+      return value || null;
+    }
+  }
+  return null;
+}
+function parseHighlights(raw) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
+  const newline = detectNewline(raw);
+  const highlights = [];
+  const lines = raw.split(/\r?\n/);
+  let lineOffset = 0;
+  const inFence = fencedLines(lines);
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
+    if (inFence[lineIdx]) {
+      lineOffset += line.length + (lineIdx < lines.length - 1 ? newline.length : 0);
+      continue;
+    }
+    const markdownPattern = /==(.*?)==/g;
+    const htmlPattern = /<mark\b[^>]*>(.*?)<\/mark>/gi;
+    let match;
+    while ((match = markdownPattern.exec(line)) !== null) {
+      const start = lineOffset + match.index;
+      const end = start + match[0].length;
+      const colour = colorAt((_a = match[1]) != null ? _a : "");
+      const innerText = ((_b = match[1]) != null ? _b : "").slice(colour.length);
+      const innerStart = start + 2 + colour.length;
+      const innerEnd = end - 2;
+      const tagsText = (_d = (_c = line.slice(0, match.index).match(/(?:^|\s)(#[^\s#]+(?:\s+#[^\s#]+)*)\s*$/u)) == null ? void 0 : _c[1]) != null ? _d : "";
+      const after = line.slice(match.index + match[0].length);
+      const footnoteId = (_h = (_g = (_e = after.match(/^\[\^([^\]]+)\]/)) == null ? void 0 : _e[1]) != null ? _g : (_f = innerText.match(/\[\^([^\]]+)\]\s*$/)) == null ? void 0 : _f[1]) != null ? _h : null;
+      highlights.push({
+        id: "",
+        text: innerText.trim(),
+        line: lineIdx,
+        type: "markdown",
+        color: colour.color,
+        start,
+        end,
+        innerStart,
+        innerEnd,
+        openTagStart: start,
+        openTagEnd: innerStart,
+        closeTagStart: innerEnd,
+        closeTagEnd: end,
+        tagsText,
+        footnoteId
+      });
+    }
+    while ((match = htmlPattern.exec(line)) !== null) {
+      const start = lineOffset + match.index;
+      const end = start + match[0].length;
+      const innerText = (_i = match[1]) != null ? _i : "";
+      const full = match[0];
+      const openTagMatch = full.match(/^<mark\b[^>]*>/i);
+      const openTag = openTagMatch ? openTagMatch[0] : "<mark>";
+      const openTagEndInMatch = openTag.length;
+      const closeTagLength = "</mark>".length;
+      const openTagStart = start;
+      const openTagEnd = start + openTagEndInMatch;
+      const innerStart = openTagEnd;
+      const innerEnd = end - closeTagLength;
+      const styleAttr = extractStyleAttribute(openTag);
+      const color = nearestHighlightColor(styleAttr ? extractBackgroundFromStyle(styleAttr.value) : null);
+      const tagsText = (_k = (_j = line.slice(0, match.index).match(/(?:^|\s)(#[^\s#]+(?:\s+#[^\s#]+)*)\s*$/u)) == null ? void 0 : _j[1]) != null ? _k : "";
+      const after = line.slice(match.index + match[0].length);
+      const footnoteId = (_o = (_n = (_l = after.match(/^\[\^([^\]]+)\]/)) == null ? void 0 : _l[1]) != null ? _n : (_m = innerText.match(/\[\^([^\]]+)\]\s*$/)) == null ? void 0 : _m[1]) != null ? _o : null;
+      highlights.push({
+        id: "",
+        text: ((_p = match[1]) != null ? _p : "").trim(),
+        line: lineIdx,
+        type: "html",
+        color,
+        start,
+        end,
+        innerStart,
+        innerEnd,
+        openTagStart,
+        openTagEnd,
+        closeTagStart: innerEnd,
+        closeTagEnd: end,
+        openTag,
+        tagsText,
+        footnoteId
+      });
+    }
+    lineOffset += line.length + (lineIdx < lines.length - 1 ? newline.length : 0);
+  }
+  highlights.sort((a, b) => a.start - b.start);
+  const perLine = /* @__PURE__ */ new Map();
+  for (const highlight of highlights) {
+    const n = (_q = perLine.get(highlight.line)) != null ? _q : 0;
+    highlight.id = `${highlight.line}:${n}`;
+    perLine.set(highlight.line, n + 1);
+  }
+  return { highlights };
+}
+function findHighlightById(parsed, id) {
+  return parsed.highlights.find((h) => h.id === id) || null;
+}
+function removeHighlightFromRaw(raw, highlight) {
+  if (!highlight) return raw;
+  const before = raw.slice(0, highlight.openTagStart);
+  const inner = raw.slice(highlight.innerStart, highlight.innerEnd);
+  const after = raw.slice(highlight.closeTagEnd);
+  return before + inner + after;
+}
+function updateHighlightColorInRaw(raw, highlight, newColor) {
+  if (!highlight) return raw;
+  const inner = stripHighlightMarkers(
+    raw.slice(highlight.innerStart, highlight.innerEnd).replace(/<mark\b[^>]*>|<\/mark>/gi, "")
+  );
+  return raw.slice(0, highlight.openTagStart) + wrapHighlight(inner, newColor) + raw.slice(highlight.closeTagEnd);
+}
+function outermost(highlights) {
+  return highlights.filter(
+    (h) => !highlights.some(
+      (other) => other !== h && other.openTagStart <= h.openTagStart && other.closeTagEnd >= h.closeTagEnd
+    )
+  );
+}
+function applyDeletions(raw, deletions) {
+  const ranges = (deletions || []).filter((r) => r && Number.isInteger(r.start) && Number.isInteger(r.end) && r.end > r.start).sort((a, b) => b.start - a.start);
+  let updated = raw;
+  for (const range of ranges) {
+    updated = updated.slice(0, range.start) + updated.slice(range.end);
+  }
+  return updated;
+}
+function mergeAdjacentHighlightsInRaw(raw) {
+  let updated = String(raw != null ? raw : "");
+  let mergedCount = 0;
+  let passes = 0;
+  while (passes < 250) {
+    passes++;
+    const parsed = parseHighlights(updated);
+    const highlights = parsed.highlights;
+    const deletions = [];
+    let mergedThisPass = 0;
+    for (let i = 0; i < highlights.length - 1; i++) {
+      const a = highlights[i];
+      const b = highlights[i + 1];
+      if (a.line !== b.line) continue;
+      if (a.type !== b.type) continue;
+      if ((a.tagsText || "").trim() || (b.tagsText || "").trim()) continue;
+      if (a.footnoteId || b.footnoteId) continue;
+      const between = updated.slice(a.closeTagEnd, b.openTagStart);
+      if (!/^\s*$/.test(between)) continue;
+      if (a.color !== b.color) continue;
+      if (a.type === "html") {
+        const aOpen = updated.slice(a.openTagStart, a.openTagEnd);
+        const bOpen = updated.slice(b.openTagStart, b.openTagEnd);
+        if (aOpen !== bOpen) continue;
+      }
+      deletions.push({ start: a.closeTagStart, end: a.closeTagEnd });
+      deletions.push({ start: b.openTagStart, end: b.openTagEnd });
+      mergedThisPass++;
+      i++;
+    }
+    if (mergedThisPass === 0) break;
+    updated = applyDeletions(updated, deletions);
+    mergedCount += mergedThisPass;
+  }
+  return { raw: updated, mergedCount };
+}
+function recolorHighlightsInRaw(raw, { from = "any", to = null } = {}) {
+  let updated = String(raw != null ? raw : "");
+  const candidates = outermost(parseHighlights(updated).highlights).filter((h) => from === "any" || (from === "default" ? h.color === null : h.color === from)).sort((a, b) => b.openTagStart - a.openTagStart);
+  let changedCount = 0;
+  for (const highlight of candidates) {
+    const before = updated;
+    updated = updateHighlightColorInRaw(updated, highlight, to);
+    if (updated !== before) changedCount++;
+  }
+  return { raw: updated, changedCount };
+}
+function convertHtmlHighlightsInRaw(raw) {
+  const source = String(raw != null ? raw : "");
+  const newline = detectNewline(source);
+  const lines = source.split(/\r?\n/);
+  const inFence = fencedLines(lines);
+  let changedCount = 0;
+  const converted = lines.map((line, index) => {
+    if (inFence[index]) return line;
+    return line.replace(/<mark\b([^>]*)>(.*?)<\/mark>/gi, (_full, attrs, inner) => {
+      changedCount++;
+      const style = extractStyleAttribute(` ${attrs}`);
+      const color = nearestHighlightColor(style ? extractBackgroundFromStyle(style.value) : null);
+      return wrapHighlight(stripHighlightMarkers(inner), color);
+    }).replace(/<span\b([^>]*)>(.*?)<\/span>/gi, (full, attrs, inner) => {
+      const style = extractStyleAttribute(` ${attrs}`);
+      const background = style ? extractBackgroundFromStyle(style.value) : null;
+      if (!background) return full;
+      changedCount++;
+      return wrapHighlight(stripHighlightMarkers(inner), nearestHighlightColor(background));
+    });
+  });
+  return { raw: converted.join(newline), changedCount };
+}
+function removeAllHighlightsFromRaw(raw) {
+  const source = String(raw != null ? raw : "");
+  const highlights = parseHighlights(source).highlights;
+  const deletions = highlights.flatMap((h) => [
+    { start: h.openTagStart, end: h.openTagEnd },
+    { start: h.closeTagStart, end: h.closeTagEnd }
+  ]);
+  return { raw: applyDeletions(source, deletions), removedCount: highlights.length };
+}
+
 // src/utils/strictSelection.ts
 function projectInline(raw, offset, kind) {
   var _a, _b, _c;
   const starts = [];
   const ends = [];
   let text = "";
-  const tokens = /(^[ \t]*(?:>[ \t]*)*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+|\[\^[^\]]+\]:\s*)|^[ \t]*(?:>[ \t]*)+)|(`+)([\s\S]*?)\2|(?:\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\[^\n]|[^$\\\n])*?[^\s\\$]\$(?!\d))|(?:\*{1,3}|_{1,3}|~~)|(?:\\[\\`*{}[\]()#+\-.!_|>~=$])|(?:&(?:#\d+|#x[\da-f]+|[a-z]+);)|[\s\S]/gim;
+  const decorations = /* @__PURE__ */ new Set();
+  const collectDecorations = (from, to) => {
+    const pairs = /\\[\s\S]|(?:\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s\\$])\$(?!\d))|(`+)[\s\S]*?\1|(\*{1,3}|_{1,3}|~~)([\s\S]*?)\2/g;
+    for (const match of raw.slice(from, to).matchAll(pairs)) {
+      if (!match[2]) continue;
+      const start = from + match.index;
+      const width = match[2].length;
+      const end = start + match[0].length - width;
+      for (let i = 0; i < width; i++) {
+        decorations.add(start + i);
+        decorations.add(end + i);
+      }
+      collectDecorations(start + width, end);
+    }
+  };
+  collectDecorations(0, raw.length);
+  const tokens = /(^[ \t]*(?:>[ \t]*)*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+|\[\^[^\]]+\]:\s*)|^[ \t]*(?:>[ \t]*)+)|(`+)([\s\S]*?)\2|(?:\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s\\$])\$(?!\d))|(?:\*{1,3}|_{1,3}|~~)|(?:\\[\\`*{}[\]()#+\-.!_|>~=$])|(?:&(?:#\d+|#x[\da-f]+|[a-z]+);)|[\s\S]/gim;
   for (const match of raw.matchAll(tokens)) {
     const token = match[0];
     const intraword = /^_+$/.test(token) && /[\p{L}\p{N}]/u.test((_a = raw[match.index - 1]) != null ? _a : "") && /[\p{L}\p{N}]/u.test((_b = raw[match.index + token.length]) != null ? _b : "");
-    if (match[1] !== void 0 || token.startsWith("$") && token.length > 1 && token.endsWith("$") || !intraword && /^(?:\*{1,3}|_{1,3}|~~)$/.test(token))
-      continue;
+    if (match[1] !== void 0 || token.startsWith("$") && token.length > 1 && token.endsWith("$")) continue;
     const code = match[2] !== void 0;
+    const decoration = /^[*_~]+$/.test(token);
     let value = code ? match[3] : token;
     if (token.startsWith("\\") && token.length === 2) value = token[1];
     else if (token.startsWith("&") && token.endsWith(";")) {
@@ -585,9 +858,11 @@ function projectInline(raw, offset, kind) {
     }
     let valueIndex = 0;
     for (const char of value) {
-      const sourceStart = offset + match.index + (code ? match[2].length + valueIndex : 0);
-      const sourceEnd = code ? sourceStart + char.length : offset + match.index + token.length;
+      const localStart = match.index + (code ? match[2].length + valueIndex : decoration ? valueIndex : 0);
+      const sourceStart = offset + localStart;
+      const sourceEnd = code || decoration ? sourceStart + char.length : offset + match.index + token.length;
       valueIndex += char.length;
+      if (decoration && !intraword && decorations.has(localStart)) continue;
       if (code && kind === "table" && char === "\\" && value[valueIndex] === "|") continue;
       const normalized = /\s/.test(char) ? " " : char;
       if (normalized === " " && (!text || text.endsWith(" "))) {
@@ -1057,20 +1332,15 @@ var SelectionLogic = class {
       regex.lastIndex = 0;
       const matches = [];
       if (regex === HIGHLIGHT_MARKUP_RE) {
-        let open = false;
-        let previousEnd = 0;
-        while ((match = regex.exec(currentText)) !== null) {
-          let length = match[0].length;
-          if (match[0] === "==") {
-            const newlineBetween = currentText.indexOf("\n", previousEnd);
-            if (newlineBetween !== -1 && newlineBetween < match.index) open = false;
-            if (!open) length += colorAt(currentText, match.index + 2).length;
-            open = !open;
+        for (const highlight of parseHighlights(currentText).highlights) {
+          for (const [start, end] of [
+            [highlight.openTagStart, highlight.openTagEnd],
+            [highlight.closeTagStart, highlight.closeTagEnd]
+          ]) {
+            matches.push({ start, end, length: end - start });
           }
-          previousEnd = match.index + length;
-          regex.lastIndex = previousEnd;
-          matches.push({ start: match.index, end: previousEnd, length });
         }
+        matches.sort((a, b) => a.start - b.start);
       } else if (regex === footnoteRefs) {
         while ((match = regex.exec(currentText)) !== null) {
           const content = match[0].substring(2, match[0].length - 1);
@@ -1999,255 +2269,6 @@ var SelectionLogic = class {
 
 // src/views/HighlightNavigator.ts
 var import_obsidian4 = require("obsidian");
-
-// src/utils/highlights.ts
-function detectNewline(raw) {
-  return raw.includes("\r\n") ? "\r\n" : "\n";
-}
-function fencedLines(lines) {
-  var _a, _b;
-  const result = [];
-  let fence = null;
-  for (const line of lines) {
-    const marker = (_b = (_a = line.match(/^[ \t]{0,3}(?:>[ \t]?)*(`{3,}|~{3,})/)) == null ? void 0 : _a[1]) != null ? _b : null;
-    if (fence === null) {
-      if (marker) fence = marker;
-      result.push(fence !== null);
-    } else {
-      result.push(true);
-      if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
-    }
-  }
-  return result;
-}
-function extractStyleAttribute(openTag) {
-  var _a;
-  const styleMatch = openTag.match(/\sstyle=(["'])([\s\S]*?)\1/i);
-  if (!styleMatch) return null;
-  return {
-    quote: styleMatch[1],
-    value: styleMatch[2],
-    index: (_a = styleMatch.index) != null ? _a : -1,
-    length: styleMatch[0].length
-  };
-}
-function extractBackgroundFromStyle(styleValue) {
-  if (!styleValue) return null;
-  const parts = styleValue.split(";").map((part) => part.trim()).filter(Boolean);
-  for (const part of parts) {
-    const colon = part.indexOf(":");
-    if (colon === -1) continue;
-    const key = part.slice(0, colon).trim().toLowerCase();
-    const value = part.slice(colon + 1).trim();
-    if (key === "background" || key === "background-color") {
-      return value || null;
-    }
-  }
-  return null;
-}
-function parseHighlights(raw) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
-  const newline = detectNewline(raw);
-  const highlights = [];
-  const lines = raw.split(/\r?\n/);
-  let lineOffset = 0;
-  const inFence = fencedLines(lines);
-  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    const line = lines[lineIdx];
-    if (inFence[lineIdx]) {
-      lineOffset += line.length + (lineIdx < lines.length - 1 ? newline.length : 0);
-      continue;
-    }
-    const markdownPattern = /==(.*?)==/g;
-    const htmlPattern = /<mark\b[^>]*>(.*?)<\/mark>/gi;
-    let match;
-    while ((match = markdownPattern.exec(line)) !== null) {
-      const start = lineOffset + match.index;
-      const end = start + match[0].length;
-      const colour = colorAt((_a = match[1]) != null ? _a : "");
-      const innerText = ((_b = match[1]) != null ? _b : "").slice(colour.length);
-      const innerStart = start + 2 + colour.length;
-      const innerEnd = end - 2;
-      const tagsText = (_d = (_c = line.slice(0, match.index).match(/(?:^|\s)(#[^\s#]+(?:\s+#[^\s#]+)*)\s*$/u)) == null ? void 0 : _c[1]) != null ? _d : "";
-      const after = line.slice(match.index + match[0].length);
-      const footnoteId = (_h = (_g = (_e = after.match(/^\[\^([^\]]+)\]/)) == null ? void 0 : _e[1]) != null ? _g : (_f = innerText.match(/\[\^([^\]]+)\]\s*$/)) == null ? void 0 : _f[1]) != null ? _h : null;
-      highlights.push({
-        id: "",
-        text: innerText.trim(),
-        line: lineIdx,
-        type: "markdown",
-        color: colour.color,
-        start,
-        end,
-        innerStart,
-        innerEnd,
-        openTagStart: start,
-        openTagEnd: innerStart,
-        closeTagStart: innerEnd,
-        closeTagEnd: end,
-        tagsText,
-        footnoteId
-      });
-    }
-    while ((match = htmlPattern.exec(line)) !== null) {
-      const start = lineOffset + match.index;
-      const end = start + match[0].length;
-      const innerText = (_i = match[1]) != null ? _i : "";
-      const full = match[0];
-      const openTagMatch = full.match(/^<mark\b[^>]*>/i);
-      const openTag = openTagMatch ? openTagMatch[0] : "<mark>";
-      const openTagEndInMatch = openTag.length;
-      const closeTagLength = "</mark>".length;
-      const openTagStart = start;
-      const openTagEnd = start + openTagEndInMatch;
-      const innerStart = openTagEnd;
-      const innerEnd = end - closeTagLength;
-      const styleAttr = extractStyleAttribute(openTag);
-      const color = nearestHighlightColor(styleAttr ? extractBackgroundFromStyle(styleAttr.value) : null);
-      const tagsText = (_k = (_j = line.slice(0, match.index).match(/(?:^|\s)(#[^\s#]+(?:\s+#[^\s#]+)*)\s*$/u)) == null ? void 0 : _j[1]) != null ? _k : "";
-      const after = line.slice(match.index + match[0].length);
-      const footnoteId = (_o = (_n = (_l = after.match(/^\[\^([^\]]+)\]/)) == null ? void 0 : _l[1]) != null ? _n : (_m = innerText.match(/\[\^([^\]]+)\]\s*$/)) == null ? void 0 : _m[1]) != null ? _o : null;
-      highlights.push({
-        id: "",
-        text: ((_p = match[1]) != null ? _p : "").trim(),
-        line: lineIdx,
-        type: "html",
-        color,
-        start,
-        end,
-        innerStart,
-        innerEnd,
-        openTagStart,
-        openTagEnd,
-        closeTagStart: innerEnd,
-        closeTagEnd: end,
-        openTag,
-        tagsText,
-        footnoteId
-      });
-    }
-    lineOffset += line.length + (lineIdx < lines.length - 1 ? newline.length : 0);
-  }
-  highlights.sort((a, b) => a.start - b.start);
-  const perLine = /* @__PURE__ */ new Map();
-  for (const highlight of highlights) {
-    const n = (_q = perLine.get(highlight.line)) != null ? _q : 0;
-    highlight.id = `${highlight.line}:${n}`;
-    perLine.set(highlight.line, n + 1);
-  }
-  return { highlights };
-}
-function findHighlightById(parsed, id) {
-  return parsed.highlights.find((h) => h.id === id) || null;
-}
-function removeHighlightFromRaw(raw, highlight) {
-  if (!highlight) return raw;
-  const before = raw.slice(0, highlight.openTagStart);
-  const inner = raw.slice(highlight.innerStart, highlight.innerEnd);
-  const after = raw.slice(highlight.closeTagEnd);
-  return before + inner + after;
-}
-function updateHighlightColorInRaw(raw, highlight, newColor) {
-  if (!highlight) return raw;
-  const inner = stripHighlightMarkers(
-    raw.slice(highlight.innerStart, highlight.innerEnd).replace(/<mark\b[^>]*>|<\/mark>/gi, "")
-  );
-  return raw.slice(0, highlight.openTagStart) + wrapHighlight(inner, newColor) + raw.slice(highlight.closeTagEnd);
-}
-function outermost(highlights) {
-  return highlights.filter(
-    (h) => !highlights.some(
-      (other) => other !== h && other.openTagStart <= h.openTagStart && other.closeTagEnd >= h.closeTagEnd
-    )
-  );
-}
-function applyDeletions(raw, deletions) {
-  const ranges = (deletions || []).filter((r) => r && Number.isInteger(r.start) && Number.isInteger(r.end) && r.end > r.start).sort((a, b) => b.start - a.start);
-  let updated = raw;
-  for (const range of ranges) {
-    updated = updated.slice(0, range.start) + updated.slice(range.end);
-  }
-  return updated;
-}
-function mergeAdjacentHighlightsInRaw(raw) {
-  let updated = String(raw != null ? raw : "");
-  let mergedCount = 0;
-  let passes = 0;
-  while (passes < 250) {
-    passes++;
-    const parsed = parseHighlights(updated);
-    const highlights = parsed.highlights;
-    const deletions = [];
-    let mergedThisPass = 0;
-    for (let i = 0; i < highlights.length - 1; i++) {
-      const a = highlights[i];
-      const b = highlights[i + 1];
-      if (a.line !== b.line) continue;
-      if (a.type !== b.type) continue;
-      if ((a.tagsText || "").trim() || (b.tagsText || "").trim()) continue;
-      if (a.footnoteId || b.footnoteId) continue;
-      const between = updated.slice(a.closeTagEnd, b.openTagStart);
-      if (!/^\s*$/.test(between)) continue;
-      if (a.color !== b.color) continue;
-      if (a.type === "html") {
-        const aOpen = updated.slice(a.openTagStart, a.openTagEnd);
-        const bOpen = updated.slice(b.openTagStart, b.openTagEnd);
-        if (aOpen !== bOpen) continue;
-      }
-      deletions.push({ start: a.closeTagStart, end: a.closeTagEnd });
-      deletions.push({ start: b.openTagStart, end: b.openTagEnd });
-      mergedThisPass++;
-      i++;
-    }
-    if (mergedThisPass === 0) break;
-    updated = applyDeletions(updated, deletions);
-    mergedCount += mergedThisPass;
-  }
-  return { raw: updated, mergedCount };
-}
-function recolorHighlightsInRaw(raw, { from = "any", to = null } = {}) {
-  let updated = String(raw != null ? raw : "");
-  const candidates = outermost(parseHighlights(updated).highlights).filter((h) => from === "any" || (from === "default" ? h.color === null : h.color === from)).sort((a, b) => b.openTagStart - a.openTagStart);
-  let changedCount = 0;
-  for (const highlight of candidates) {
-    const before = updated;
-    updated = updateHighlightColorInRaw(updated, highlight, to);
-    if (updated !== before) changedCount++;
-  }
-  return { raw: updated, changedCount };
-}
-function convertHtmlHighlightsInRaw(raw) {
-  const source = String(raw != null ? raw : "");
-  const newline = detectNewline(source);
-  const lines = source.split(/\r?\n/);
-  const inFence = fencedLines(lines);
-  let changedCount = 0;
-  const converted = lines.map((line, index) => {
-    if (inFence[index]) return line;
-    return line.replace(/<mark\b([^>]*)>(.*?)<\/mark>/gi, (_full, attrs, inner) => {
-      changedCount++;
-      const style = extractStyleAttribute(` ${attrs}`);
-      const color = nearestHighlightColor(style ? extractBackgroundFromStyle(style.value) : null);
-      return wrapHighlight(stripHighlightMarkers(inner), color);
-    }).replace(/<span\b([^>]*)>(.*?)<\/span>/gi, (full, attrs, inner) => {
-      const style = extractStyleAttribute(` ${attrs}`);
-      const background = style ? extractBackgroundFromStyle(style.value) : null;
-      if (!background) return full;
-      changedCount++;
-      return wrapHighlight(stripHighlightMarkers(inner), nearestHighlightColor(background));
-    });
-  });
-  return { raw: converted.join(newline), changedCount };
-}
-function removeAllHighlightsFromRaw(raw) {
-  const source = String(raw != null ? raw : "");
-  const highlights = parseHighlights(source).highlights;
-  const deletions = highlights.flatMap((h) => [
-    { start: h.openTagStart, end: h.openTagEnd },
-    { start: h.closeTagStart, end: h.closeTagEnd }
-  ]);
-  return { raw: applyDeletions(source, deletions), removedCount: highlights.length };
-}
 
 // src/modals/HighlightEditModal.ts
 var import_obsidian2 = require("obsidian");
@@ -3275,6 +3296,7 @@ var ReadingHighlighterPlugin = class extends import_obsidian6.Plugin {
     const blocks = Array.from(root.querySelectorAll(selector)).filter((element) => {
       const text = this.getElementText(element);
       if (!text) return false;
+      if (!range) return true;
       try {
         if (!range.intersectsNode(element)) return false;
         const portion = this.intersectRangeWithBlock(range, element);
@@ -3283,11 +3305,16 @@ var ReadingHighlighterPlugin = class extends import_obsidian6.Plugin {
         return false;
       }
     });
-    return blocks.filter(
-      (element) => !blocks.some(
-        (other) => other !== element && other.contains(element) && other.closest("li") === element.closest("li")
-      )
-    );
+    const hasMultipleParagraphs = (element) => element.tagName === "LI" && Array.from(element.children).filter((child) => child.tagName === "P").length > 1;
+    const eligible = new Set(blocks.filter((element) => !hasMultipleParagraphs(element)));
+    return blocks.filter((element) => {
+      if (!eligible.has(element)) return false;
+      const list = element.closest("li");
+      for (let parent = element.parentElement; parent && parent !== root; parent = parent.parentElement) {
+        if (eligible.has(parent) && parent.closest("li") === list) return false;
+      }
+      return true;
+    });
   }
   getClosestAllowedBlock(node, root) {
     let current = (node == null ? void 0 : node.nodeType) === Node.ELEMENT_NODE ? node : node == null ? void 0 : node.parentElement;
@@ -3348,8 +3375,9 @@ var ReadingHighlighterPlugin = class extends import_obsidian6.Plugin {
     if (!scope) return -1;
     if (hint && scope.footnoteId) hint.footnoteId = scope.footnoteId;
     const contextText = this.getElementText(contextElement);
-    const matching = [...scope.root.querySelectorAll(contextElement.tagName.toLowerCase())].filter(
-      (element) => this.getElementText(element) === contextText
+    const kind = kindForElement(contextElement);
+    const matching = this.getAllowedBlocksInRange(null, scope.root).filter(
+      (element) => this.getElementText(element) === contextText && (kindForElement(element) === kind || kind === "paragraph" && kindForElement(element) === "footnote")
     );
     if (hint) hint.blockTotal = matching.length;
     return matching.indexOf(contextElement);

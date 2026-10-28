@@ -6,22 +6,37 @@ function projectInline(raw: string, offset: number, kind: BlockKind) {
     const starts: number[] = [];
     const ends: number[] = [];
     let text = "";
+    // ponytail: pair prose delimiters; use renderer token offsets for complex Markdown nesting.
+    // Leave unmatched delimiters visible, just as Reading View does.
+    const decorations = new Set<number>();
+    const collectDecorations = (from: number, to: number): void => {
+        const pairs =
+            /\\[\s\S]|(?:\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s\\$])\$(?!\d))|(`+)[\s\S]*?\1|(\*{1,3}|_{1,3}|~~)([\s\S]*?)\2/g;
+        for (const match of raw.slice(from, to).matchAll(pairs)) {
+            if (!match[2]) continue;
+            const start = from + match.index;
+            const width = match[2].length;
+            const end = start + match[0].length - width;
+            for (let i = 0; i < width; i++) {
+                decorations.add(start + i);
+                decorations.add(end + i);
+            }
+            collectDecorations(start + width, end);
+        }
+    };
+    collectDecorations(0, raw.length);
     const tokens =
-        /(^[ \t]*(?:>[ \t]*)*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+|\[\^[^\]]+\]:\s*)|^[ \t]*(?:>[ \t]*)+)|(`+)([\s\S]*?)\2|(?:\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\[^\n]|[^$\\\n])*?[^\s\\$]\$(?!\d))|(?:\*{1,3}|_{1,3}|~~)|(?:\\[\\`*{}[\]()#+\-.!_|>~=$])|(?:&(?:#\d+|#x[\da-f]+|[a-z]+);)|[\s\S]/gim;
+        /(^[ \t]*(?:>[ \t]*)*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+|\[\^[^\]]+\]:\s*)|^[ \t]*(?:>[ \t]*)+)|(`+)([\s\S]*?)\2|(?:\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s\\$])\$(?!\d))|(?:\*{1,3}|_{1,3}|~~)|(?:\\[\\`*{}[\]()#+\-.!_|>~=$])|(?:&(?:#\d+|#x[\da-f]+|[a-z]+);)|[\s\S]/gim;
     for (const match of raw.matchAll(tokens)) {
         const token = match[0];
         const intraword =
             /^_+$/.test(token) &&
             /[\p{L}\p{N}]/u.test(raw[match.index - 1] ?? "") &&
             /[\p{L}\p{N}]/u.test(raw[match.index + token.length] ?? "");
-        if (
-            match[1] !== undefined ||
-            (token.startsWith("$") && token.length > 1 && token.endsWith("$")) ||
-            (!intraword && /^(?:\*{1,3}|_{1,3}|~~)$/.test(token))
-        )
-            continue;
+        if (match[1] !== undefined || (token.startsWith("$") && token.length > 1 && token.endsWith("$"))) continue;
         // Code is literal: preserve its contents and per-character offsets.
         const code = match[2] !== undefined;
+        const decoration = /^[*_~]+$/.test(token);
         let value = code ? match[3] : token;
         if (token.startsWith("\\") && token.length === 2) value = token[1];
         else if (token.startsWith("&") && token.endsWith(";")) {
@@ -29,9 +44,11 @@ function projectInline(raw: string, offset: number, kind: BlockKind) {
         }
         let valueIndex = 0;
         for (const char of value) {
-            const sourceStart = offset + match.index + (code ? match[2].length + valueIndex : 0);
-            const sourceEnd = code ? sourceStart + char.length : offset + match.index + token.length;
+            const localStart = match.index + (code ? match[2].length + valueIndex : decoration ? valueIndex : 0);
+            const sourceStart = offset + localStart;
+            const sourceEnd = code || decoration ? sourceStart + char.length : offset + match.index + token.length;
             valueIndex += char.length;
+            if (decoration && !intraword && decorations.has(localStart)) continue;
             // Table parsing consumes escaped pipes even inside code spans.
             if (code && kind === "table" && char === "\\" && value[valueIndex] === "|") continue;
             const normalized = /\s/.test(char) ? " " : char;

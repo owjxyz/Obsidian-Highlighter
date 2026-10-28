@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { setup } from "./WritePath.test.js";
 import { FloatingManager } from "../src/ui/FloatingManager";
+import { Platform } from "./obsidian-stub.js";
 import { renderHtml } from "./dom-helpers.js";
 
 const raw = "Same footnote text.[^first][^second]\n\n[^first]: Same footnote text.\n\n[^second]: Same footnote text.";
@@ -114,4 +115,90 @@ describe("footnote hover selection", () => {
             expect(ctx.out()).toBe(raw);
         }
     );
+});
+
+describe("moving from a footnote to its toolbar", () => {
+    it.each(["highlight", "color", "remove"])("keeps the popup alive until %s is applied", async (action) => {
+        vi.useFakeTimers();
+        try {
+            const source =
+                action === "remove" ? raw.replace("[^second]: Same footnote", "[^second]: Same ==footnote==") : raw;
+            const ctx = await popoverSetup(
+                source,
+                action === "remove" ? "<p>Same <mark>footnote</mark> text.</p>" : "<p>Same footnote text.</p>"
+            );
+            // Native HoverPopover schedules dismissal when relatedTarget is outside hoverEl.
+            ctx.hoverEl.addEventListener("mouseout", (event) => {
+                if (!ctx.hoverEl.contains(event.relatedTarget))
+                    ctx.window.setTimeout(() => {
+                        ctx.hoverEl.remove();
+                        ctx.view.previewMode.hoverPopover = null;
+                    }, 300);
+            });
+            ctx.select(action === "remove" ? "mark" : "p");
+            const manager = ctx.plugin.floatingManager;
+            const button =
+                action === "highlight"
+                    ? manager.highlightBtn
+                    : action === "remove"
+                      ? manager.removeBtn
+                      : manager.colorButtons[0];
+            ctx.hoverEl.dispatchEvent(new ctx.window.MouseEvent("mouseout", { bubbles: true, relatedTarget: button }));
+            button.dispatchEvent(new ctx.window.MouseEvent("mouseover", { bubbles: true, relatedTarget: ctx.hoverEl }));
+            await vi.advanceTimersByTimeAsync(500);
+            button.dispatchEvent(new ctx.window.MouseEvent("mousedown", { bubbles: true }));
+            await vi.waitFor(() =>
+                expect(ctx.out()).toBe(
+                    action === "remove"
+                        ? raw
+                        : raw.replace(
+                              "[^second]: Same footnote",
+                              action === "color" ? "[^second]: Same ==🔴footnote==" : "[^second]: Same ==footnote=="
+                          )
+                )
+            );
+            expect(ctx.hoverEl.isConnected).toBe(true);
+            expect(manager.containerEl.parentElement).toBe(ctx.doc.body);
+            ctx.plugin.floatingManager.unload();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("moves the toolbar back to the note after the popup is closed", async () => {
+        const ctx = await popoverSetup();
+        ctx.select();
+        expect(ctx.hoverEl.contains(ctx.plugin.floatingManager.containerEl)).toBe(true);
+        ctx.hoverEl.remove();
+        ctx.view.previewMode.hoverPopover = null;
+        const node = ctx.content.querySelector("p").firstChild;
+        const range = ctx.doc.createRange();
+        range.setStart(node, 0);
+        range.setEnd(node, 4);
+        const selection = ctx.window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        ctx.plugin.floatingManager.handleSelection();
+        expect(ctx.plugin.floatingManager.containerEl.parentElement).toBe(ctx.doc.body);
+        expect(ctx.plugin.floatingManager.containerEl.style.display).toBe("flex");
+        ctx.plugin.floatingManager.unload();
+    });
+});
+
+it("keeps the toolbar content-sized without changing the footnote embed width", async () => {
+    const ctx = await popoverSetup();
+    let pluginStyles = "";
+    if (Platform.isDesktop) {
+        const { readFileSync } = await import("node:fs");
+        pluginStyles = readFileSync("styles.css", "utf8");
+    }
+    const style = ctx.doc.createElement("style");
+    style.textContent = ".popover.hover-popover > * { width: 480px; }\n" + pluginStyles;
+    ctx.doc.head.appendChild(style);
+    ctx.select();
+    const toolbar = ctx.plugin.floatingManager.containerEl;
+    expect(ctx.hoverEl.contains(toolbar)).toBe(true);
+    expect(ctx.window.getComputedStyle(ctx.containerEl).width).toBe("480px");
+    expect(ctx.window.getComputedStyle(toolbar).width).not.toBe("480px");
+    ctx.plugin.floatingManager.unload();
 });

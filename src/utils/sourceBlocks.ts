@@ -21,6 +21,12 @@ export interface SourceBlock {
 export function kindForElement(element: Element | null | undefined): BlockKind | null {
     if (!element) return null;
     if (element.matches("li[data-footnote-id]")) return "footnote";
+    if (
+        element.tagName === "P" &&
+        element.parentElement?.tagName === "LI" &&
+        element === element.parentElement.firstElementChild
+    )
+        return element.parentElement.matches("[data-footnote-id]") ? "footnote" : "list";
     const upper = element.tagName.toUpperCase();
     if (/^H[1-6]$/.test(upper)) return "heading";
     if (upper === "LI") return "list";
@@ -142,6 +148,7 @@ export function splitSourceBlocks(text: string, offset = 0): SourceBlock[] {
             blockStart = lineStart;
             blockEnd = contentEnd;
             blockKind = ownBlockKind(line) ?? "paragraph";
+            if (blockKind === "heading" || THEMATIC_BREAK_RE.test(line)) flush();
         } else if (blockStart === -1) {
             blockStart = lineStart;
             blockEnd = contentEnd;

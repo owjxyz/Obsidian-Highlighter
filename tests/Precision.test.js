@@ -93,7 +93,7 @@ describe("precise Reading View selection", () => {
     });
 
     it("refuses a source/DOM block-count mismatch rather than selecting another paragraph", async () => {
-        const raw = "A * rate.\n\nA \\* rate.";
+        const raw = "A * rate.";
         const ctx = await setup(raw, "<p>A * rate.</p><p>A * rate.</p>");
         await paint(ctx, selection(ctx, textNodes(ctx.content.querySelector("p"))[0], 4));
         expect(ctx.out()).toBe(raw);
@@ -467,4 +467,114 @@ describe("precise Reading View selection", () => {
         await paint(ctx, selection(ctx, node, 0));
         expect(ctx.out()).toBe(raw);
     });
+});
+
+describe("Chapter audit regressions", () => {
+    it.each([
+        [
+            "### Options (옵션)\n-> 선택",
+            "<h3>Options (옵션)</h3><p>-&gt; 선택</p>",
+            "Options",
+            "### ==🔴Options== (옵션)\n-> 선택",
+        ],
+        [
+            "### Options (옵션)\n-> 선택",
+            "<h3>Options (옵션)</h3><p>-&gt; 선택</p>",
+            "선택",
+            "### Options (옵션)\n-> ==🔴선택==",
+        ],
+        [
+            "---\n금융 상품의 이론 가격",
+            "<hr><p>금융 상품의 이론 가격</p>",
+            "상품의",
+            "---\n금융 ==🔴상품의== 이론 가격",
+        ],
+        [
+            "- $P$ = Price at $t$",
+            '<ul><li><span class="math">P</span> = Price at <span class="math">t</span></li></ul>',
+            "Price",
+            "- $P$ = ==🔴Price== at $t$",
+        ],
+        [
+            "- $r=3\\%$ per half year",
+            '<ul><li><span class="math">r=3%</span> per half year</li></ul>',
+            "half",
+            "- $r=3\\%$ per ==🔴half== year",
+        ],
+        [
+            "단기적으로는 ~~~ 강의 보고 다시 정리",
+            "<p>단기적으로는 ~~~ 강의 보고 다시 정리</p>",
+            "강의",
+            "단기적으로는 ~~~ ==🔴강의== 보고 다시 정리",
+        ],
+        [
+            "- **Time / Cash Flow***",
+            "<ul><li><strong>Time / Cash Flow*</strong></li></ul>",
+            "Time",
+            "- **==🔴Time== / Cash Flow***",
+        ],
+        [
+            "설명 — 🔴분산투자에 참여할 수 있다==는 설명이다.",
+            "<p>설명 — 🔴분산투자에 참여할 수 있다==는 설명이다.</p>",
+            "참여할",
+            "설명 — 🔴분산투자에 ==🔴참여할== 수 있다==는 설명이다.",
+        ],
+    ])("highlights %s exactly", async (raw, html, word, expected) => {
+        const ctx = await setup(raw, html);
+        const node = textNodes(ctx.content).find(
+            (n) => !n.parentElement.closest(".math") && n.nodeValue.includes(word)
+        );
+        const start = node.nodeValue.indexOf(word);
+        await ctx.plugin.applyColorByIndex(ctx.view, 0, selection(ctx, node, start, node, start + word.length));
+        expect(ctx.out()).toBe(expected);
+    });
+});
+
+describe("loose list paragraphs separated by nested content", () => {
+    it.each(["first", "later"])("highlights the %s paragraph independently", async (word) => {
+        const raw = "- first beta\n  - child gamma\n\n  later delta";
+        const ctx = await setup(
+            raw,
+            "<ul><li><p>first beta</p><ul><li>child gamma</li></ul><p>later delta</p></li></ul>"
+        );
+        const node = textNodes(ctx.content).find((n) => n.nodeValue.includes(word));
+        await ctx.plugin.applyColorByIndex(ctx.view, 0, selection(ctx, node, 0, node, word.length));
+        expect(ctx.out()).toBe(
+            word === "first"
+                ? "- ==🔴first== beta\n  - child gamma\n\n  later delta"
+                : "- first beta\n  - child gamma\n\n  ==🔴later== delta"
+        );
+    });
+});
+
+it("anchors prose around math containing currency signs and soft line breaks", async () => {
+    const raw =
+        "- Face value is $1,000, paid for $\\frac{\\$1,000}{1.06^2}=\\$890$ and matures to $1,000  \n  오늘 $\\frac{\\$1,000}{1.06^2}=\\$890$에 매입";
+    const ctx = await setup(
+        raw,
+        '<ul><li>Face value is <span class="math">formula</span> and matures to <span class="math">formula</span>에 매입</li></ul>'
+    );
+    const node = textNodes(ctx.content)[0];
+    await ctx.plugin.applyColorByIndex(ctx.view, 0, selection(ctx, node, 0, node, 4));
+    expect(ctx.out()).toBe(
+        "- ==🔴Face== value is $1,000, paid for $\\frac{\\$1,000}{1.06^2}=\\$890$ and matures to $1,000  \n  오늘 $\\frac{\\$1,000}{1.06^2}=\\$890$에 매입"
+    );
+});
+
+it.each([
+    [
+        "alpha beta\n\n- alpha beta\n\n  later delta",
+        "<p>alpha beta</p><ul><li><p>alpha beta</p><p>later delta</p></li></ul>",
+        "- ==🔴alpha== beta",
+    ],
+    [
+        "- alpha beta\n\n  later delta\n\n- alpha beta",
+        "<ul><li><p>alpha beta</p><p>later delta</p></li><li>alpha beta</li></ul>",
+        "- ==🔴alpha== beta",
+    ],
+])("counts duplicate list anchors independently of ordinary paragraphs: %s", async (raw, html, expected) => {
+    const ctx = await setup(raw, html);
+    const node = ctx.content.querySelector("li p").firstChild;
+    await ctx.plugin.applyColorByIndex(ctx.view, 0, selection(ctx, node, 0, node, 5));
+    expect(ctx.out()).toBe(raw.replace("- alpha beta", expected));
 });

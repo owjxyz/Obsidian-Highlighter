@@ -1,7 +1,7 @@
 import { App, TFile, MarkdownView } from "obsidian";
 import { BlockKind, SourceBlock, splitSourceBlocks, findBlockAt } from "../utils/sourceBlocks";
 import type { SelectionHint } from "../utils/blockOccurrence";
-import { colorAt } from "../utils/colors";
+import { parseHighlights } from "../utils/highlights";
 import { locateAnchoredSelection } from "../utils/strictSelection";
 
 interface LearnedRule {
@@ -633,24 +633,15 @@ export class SelectionLogic {
             const matches: { start: number; end: number; length: number }[] = [];
 
             if (regex === HIGHLIGHT_MARKUP_RE) {
-                // An opening `==` may carry a colour emoji (`==🟡text==`) that
-                // Reading view never shows, so it goes with the marker. Markers
-                // pair left to right within a line, as Obsidian reads them; an
-                // emoji after a closing marker is visible text and stays.
-                let open = false;
-                let previousEnd = 0;
-                while ((match = regex.exec(currentText)) !== null) {
-                    let length = match[0].length;
-                    if (match[0] === "==") {
-                        const newlineBetween = currentText.indexOf("\n", previousEnd);
-                        if (newlineBetween !== -1 && newlineBetween < match.index) open = false;
-                        if (!open) length += colorAt(currentText, match.index + 2).length;
-                        open = !open;
+                for (const highlight of parseHighlights(currentText).highlights) {
+                    for (const [start, end] of [
+                        [highlight.openTagStart, highlight.openTagEnd],
+                        [highlight.closeTagStart, highlight.closeTagEnd],
+                    ]) {
+                        matches.push({ start, end, length: end - start });
                     }
-                    previousEnd = match.index + length;
-                    regex.lastIndex = previousEnd;
-                    matches.push({ start: match.index, end: previousEnd, length });
                 }
+                matches.sort((a, b) => a.start - b.start);
             } else if (regex === footnoteRefs) {
                 // Special handling for footnotes
                 while ((match = regex.exec(currentText)) !== null) {

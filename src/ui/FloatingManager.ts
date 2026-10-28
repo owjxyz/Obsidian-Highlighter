@@ -319,14 +319,15 @@ export class FloatingManager {
                 range: range.cloneRange(),
             };
 
-            this.show(rect);
+            // Native HoverPopover keeps itself open while the pointer is over a descendant.
+            this.show(rect, scope.footnoteId ? scope.root.closest<HTMLElement>(".hover-popover") : null);
         } else {
             this._selectionSnapshot = null;
             this.hide();
         }
     }
 
-    show(rect: DOMRect) {
+    show(rect: DOMRect, parent: HTMLElement | null = null) {
         if (!this.containerEl || !rect) return;
         // A note can be moved to a popout window after the toolbar was built.
         // Rebuild into the right document rather than showing it in the old one.
@@ -334,6 +335,9 @@ export class FloatingManager {
             this.refresh();
             if (!this.containerEl) return;
         }
+
+        const host = parent ?? this.containerEl.ownerDocument.body;
+        if (this.containerEl.parentElement !== host) host.appendChild(this.containerEl);
 
         const pos = this.plugin.settings.toolbarPosition || "text";
         const vertical = pos === "left" || pos === "right";
@@ -391,6 +395,9 @@ export class FloatingManager {
     hide() {
         if (this.containerEl) {
             this.containerEl.setCssStyles({ display: "none" });
+            // A closing popover must not take the shared toolbar with it.
+            const body = this.containerEl.ownerDocument.body;
+            if (this.containerEl.parentElement !== body) body.appendChild(this.containerEl);
         }
     }
 }

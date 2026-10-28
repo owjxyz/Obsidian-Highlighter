@@ -135,8 +135,8 @@ describe("the matcher's view of the source", () => {
         expect(filtered("==uno==🔴 dos")).toBe("uno🔴 dos");
     });
 
-    it("pairs markers line by line", () => {
-        expect(filtered("==a\n==🟢b==")).toBe("a\nb");
+    it("removes paired markers on each line", () => {
+        expect(filtered("==a==\n==🟢b==")).toBe("a\nb");
     });
 
     it("maps offsets back past the emoji", async () => {
