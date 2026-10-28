@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import install
 
+assert install.REPOSITORY == "owjxyz/Obsidian-Superior-Highlighter"
+
 
 assets = {
     "main.js": b"module.exports = class {};\n",

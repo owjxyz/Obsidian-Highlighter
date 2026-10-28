@@ -4,13 +4,13 @@ Highlight exactly what you select in Obsidian Reading View. Matches the selected
 
 **Author:** [WooJIN OH (owjxyz)](https://github.com/owjxyz)
 
-[GitHub repository](https://github.com/owjxyz/Obsidian-Highlighter)
+[GitHub repository](https://github.com/owjxyz/Obsidian-Superior-Highlighter) · [Obsidian community listing](https://community.obsidian.md/plugins/superior-highlighter)
 
 [KOREAN](README.ko.md)
 
 ## Install
 
-Community plugin approval is pending. Until it is approved, use the installer or manual installation below.
+In Obsidian, open **Settings → Community plugins → Browse**, search for **Superior Highlighter**, then install and enable it. You can also open its [community listing](https://community.obsidian.md/plugins/superior-highlighter).
 
 For the terminal installer, follow the instructions below.
 
@@ -19,13 +19,13 @@ Close Obsidian, open a terminal in your vault folder, and run:
 **macOS (Terminal)**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Highlighter/main/install.py | python3 -
+curl -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | python3 -
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Highlighter/main/install.py | py -3 -
+curl.exe -fsSL https://raw.githubusercontent.com/owjxyz/Obsidian-Superior-Highlighter/main/install.py | py -3 -
 ```
 
 Use `curl.exe` explicitly: Windows PowerShell 5.1 aliases `curl` to `Invoke-WebRequest`, which does not accept `-fsSL`. If `py` is unavailable but `python --version` reports Python 3.9+, replace `py -3 -` with `python -`.
@@ -37,7 +37,7 @@ Use `curl.exe` explicitly: Windows PowerShell 5.1 aliases `curl` to `Invoke-WebR
 - Existing Superior Highlighter settings are preserved.
 - Updates happen when you run the script; it does not install a background updater. Preview releases are excluded. If release lookup or verification fails, the vault stays unchanged.
 
-Manual installation: download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/owjxyz/Obsidian-Highlighter/releases/latest), place them in `.obsidian/plugins/superior-highlighter/`, then enable **Superior Highlighter**.
+Manual installation: download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/owjxyz/Obsidian-Superior-Highlighter/releases/latest), place them in `.obsidian/plugins/superior-highlighter/`, then enable **Superior Highlighter**.
 
 ## Shortcuts
 
@@ -71,7 +71,7 @@ The plugin reads and edits the note containing the selection, including the sour
 
 The release workflow builds and tests main-branch updates and version tags in GitHub Actions, checks their committed checksums, and generates GitHub artifact attestations for `main.js`, `manifest.json`, and `styles.css`. Only a version tag prepares a release draft using those same files; publishing remains a separate, deliberate step. Manually running **Verify release provenance** builds and attests the selected ref without creating a release when that ref is a branch.
 
-For a release produced by this workflow, download its assets and verify their build provenance with `gh attestation verify main.js --repo owjxyz/Obsidian-Highlighter` (repeat for `manifest.json` and `styles.css`). `SHA256SUMS` remains an extra release asset for the terminal installer; Obsidian does not download it. Existing releases are not changed by adding the workflow.
+For a release produced by this workflow, download its assets and verify their build provenance with `gh attestation verify main.js --repo owjxyz/Obsidian-Superior-Highlighter` (repeat for `manifest.json` and `styles.css`). `SHA256SUMS` remains an extra release asset for the terminal installer; Obsidian does not download it. Existing releases are not changed by adding the workflow.
 
 ## Develop
 
