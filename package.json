@@ -1,0 +1,48 @@
+{
+    "name": "superior-highlighter",
+    "version": "0.1.1",
+    "description": "Highlight exact selections in Reading View using surrounding context and native colours.",
+    "main": "main.js",
+    "scripts": {
+        "dev": "node esbuild.config.mjs",
+        "build": "npm run lint:all && node esbuild.config.mjs production",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "eslint .",
+        "lint:review": "eslint . -c eslint.review.config.mjs",
+        "lint:all": "eslint . --max-warnings=0 && eslint . -c eslint.review.config.mjs --max-warnings=0",
+        "format": "prettier --write \"src/**/*.{js,ts}\" \"tests/**/*.{js,ts}\" \"*.{json,md,mjs}\"",
+        "format:check": "prettier --check \"src/**/*.{js,ts}\" \"tests/**/*.{js,ts}\" \"*.{json,md,mjs}\"",
+        "typecheck": "tsc --noEmit --ignoreDeprecations 6.0"
+    },
+    "keywords": [
+        "obsidian",
+        "obsidian-plugin"
+    ],
+    "author": "WooJIN OH",
+    "license": "MIT",
+    "devDependencies": {
+        "@eslint/js": "^9.39.2",
+        "@eslint/json": "^0.14.0",
+        "@types/node": "^20.19.39",
+        "@typescript-eslint/parser": "^8.71.2",
+        "esbuild": "^0.28.0",
+        "eslint": "^9.39.2",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-obsidianmd": "^0.4.2",
+        "globals": "^17.13.0",
+        "jsdom": "^30.0.1",
+        "obsidian": "^1.13.1",
+        "prettier": "^3.8.3",
+        "tslib": "2.4.0",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.71.2",
+        "vitest": "^4.1.4"
+    },
+    "overrides": {
+        "ajv": "6.14.0",
+        "brace-expansion": "1.1.13",
+        "flatted": "3.4.2",
+        "minimatch": "3.1.4"
+    }
+}

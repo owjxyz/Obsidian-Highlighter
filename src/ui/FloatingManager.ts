@@ -1,0 +1,396 @@
+import { setIcon, MarkdownView, Platform, App } from "obsidian";
+import type ReadingHighlighterPlugin from "../main";
+import { COLOR_LABELS, HIGHLIGHT_COLORS } from "../utils/colors";
+
+type ActionName = "highlightSelection" | "removeHighlightSelection";
+
+export interface SelectionSnapshot {
+    text: string;
+    range: Range | null;
+}
+
+export class FloatingManager {
+    plugin: ReadingHighlighterPlugin;
+    app: App;
+    containerEl: HTMLDivElement | null;
+    highlightBtn: HTMLButtonElement | null;
+    removeBtn: HTMLButtonElement | null;
+    colorButtons: HTMLButtonElement[];
+    paletteContainer: HTMLDivElement | null;
+    _handlers: (() => void)[];
+    longPressTimer: number | null;
+    _selectionDebounceTimer: number | null;
+    _selectionSnapshot: SelectionSnapshot | null;
+
+    constructor(plugin: ReadingHighlighterPlugin) {
+        this.plugin = plugin;
+        this.app = plugin.app;
+        this.containerEl = null;
+        this.highlightBtn = null;
+        this.removeBtn = null;
+        this.colorButtons = [];
+        this.paletteContainer = null;
+        this._handlers = [];
+
+        // Mobile gesture state
+        this.longPressTimer = null;
+
+        // Android selection debounce
+        this._selectionDebounceTimer = null;
+
+        // Selection snapshot — cached when toolbar is shown so actions can use it
+        // even if Android clears the native selection on touchstart
+        this._selectionSnapshot = null;
+    }
+
+    load() {
+        this.createElements();
+        this.registerEvents();
+        if (Platform.isMobile) {
+            this.setupMobileGestures();
+        }
+    }
+
+    unload() {
+        this.containerEl?.remove();
+        this.containerEl = null;
+        this._handlers.forEach((cleanup) => cleanup());
+        this._handlers = [];
+        if (this._selectionDebounceTimer) {
+            window.clearTimeout(this._selectionDebounceTimer);
+            this._selectionDebounceTimer = null;
+        }
+    }
+
+    refresh() {
+        // Rebuild toolbar when settings change
+        if (this.containerEl) {
+            this.containerEl.remove();
+            this.containerEl = null;
+        }
+        this.colorButtons = [];
+        this.createElements();
+        this.registerEvents();
+        // Deliberately not shown here. Visibility belongs to `selectionchange`,
+        // and a settings change is made from the settings window — showing the
+        // toolbar at that moment puts it on top of the settings, not in a note.
+        // `createElements` has placed it in the reading view's document, so the
+        // next selection there brings it up.
+    }
+
+    /**
+     * The document the toolbar belongs in — the one holding the reading view,
+     * not whichever window happens to be focused.
+     *
+     * `activeDocument` follows focus, and in Obsidian 1.13 the settings window
+     * is a separate OS window. Building the toolbar against `activeDocument`
+     * while settings are open puts it inside the settings window: it appears
+     * floating over the preferences, and the note is left without one until the
+     * app restarts.
+     */
+    targetDocument(): Document {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const fromView = view?.containerEl?.ownerDocument;
+        if (fromView) return fromView;
+        const fromWorkspace = (this.app.workspace as { containerEl?: HTMLElement }).containerEl?.ownerDocument;
+        return fromWorkspace ?? activeDocument;
+    }
+
+    /**
+     * Build the toolbar as one of Obsidian's own menus.
+     *
+     * The container carries the `menu` class and every button is a
+     * `clickable-icon`, so each theme and preset draws the toolbar the way it
+     * draws its context menus and icon buttons: surface, border, radius,
+     * shadow, icon and hover colours. styles.css only lays it out. Phones are
+     * the exception: there a `.menu` is a bottom sheet, pinned to the screen's
+     * foot by Obsidian's own rules, so the container takes the menu's look from
+     * its variables instead.
+     */
+    createElements() {
+        if (this.containerEl) return;
+
+        const doc = this.targetDocument();
+        // Created through the target document's own body, so the toolbar lands
+        // in the window holding the note rather than whichever has focus.
+        this.containerEl = doc.body.createDiv({ cls: "reading-highlighter-float-container" });
+        if (!Platform.isPhone) this.containerEl.addClass("menu");
+        this.hide();
+
+        // Main highlight button
+        this.highlightBtn = this.createButton("highlighter", "Highlight selection");
+
+        // Obsidian's native highlight colours (only if enabled)
+        if (this.plugin.settings.enableColorPalette) {
+            this.paletteContainer = this.containerEl.createDiv({ cls: "reading-highlighter-palette" });
+
+            for (const [index, color] of HIGHLIGHT_COLORS.entries()) {
+                const colorBtn = this.paletteContainer.createEl("button", {
+                    cls: "clickable-icon reading-highlighter-btn reading-highlighter-color-btn",
+                });
+                colorBtn.createSpan({
+                    cls: "highlight-swatch reading-highlighter-swatch",
+                    attr: { "data-highlight": color },
+                });
+                colorBtn.setAttribute("aria-label", COLOR_LABELS[color]);
+                colorBtn.setAttribute("data-color-index", index.toString());
+                this.colorButtons.push(colorBtn);
+            }
+        }
+
+        if (this.paletteContainer && this.plugin.settings.showRemoveButton) {
+            this.containerEl.createDiv({ cls: "reading-highlighter-separator" });
+        }
+
+        // Remove button
+        if (this.plugin.settings.showRemoveButton) {
+            this.removeBtn = this.createButton("trash-2", "Remove highlights");
+            this.removeBtn.addClass("reading-highlighter-remove-btn");
+        }
+    }
+
+    createButton(iconName: string, label: string): HTMLButtonElement {
+        // Parented to the toolbar, so the element is created in the same
+        // document the toolbar lives in.
+        const btn = (this.containerEl ?? this.targetDocument().body).createEl("button");
+        setIcon(btn, iconName);
+        // Only add tooltip if enabled in settings
+        if (this.plugin.settings.showTooltips) {
+            btn.setAttribute("aria-label", label);
+        }
+        btn.addClass("clickable-icon", "reading-highlighter-btn");
+        return btn;
+    }
+
+    registerEvents() {
+        const preventFocus = (evt: Event) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+        };
+
+        const attachAction = (btn: HTMLButtonElement | null, actionName: ActionName) => {
+            if (!btn) return;
+
+            const handler = (evt: Event) => {
+                preventFocus(evt);
+                const view = this.plugin.getActiveReadingView();
+                if (view) void this.plugin[actionName](view, this._selectionSnapshot);
+
+                this.hide();
+            };
+
+            btn.addEventListener("mousedown", handler);
+            btn.addEventListener("touchstart", handler, { passive: false });
+        };
+
+        // Main actions
+        attachAction(this.highlightBtn, "highlightSelection");
+        attachAction(this.removeBtn, "removeHighlightSelection");
+
+        // Color palette buttons
+        this.colorButtons.forEach((btn) => {
+            // Native colour order matches the colour shortcut indices.
+            const index = Number(btn.getAttribute("data-color-index"));
+            const handler = (evt: Event) => {
+                preventFocus(evt);
+                const view = this.plugin.getActiveReadingView();
+                if (view) void this.plugin.applyColorByIndex(view, index, this._selectionSnapshot);
+
+                this.hide();
+            };
+
+            btn.addEventListener("mousedown", handler);
+            btn.addEventListener("touchstart", handler, { passive: false });
+        });
+    }
+
+    setupMobileGestures() {
+        // Long press to highlight without showing toolbar
+        // Only enable on iOS — on Android this races with the native selection
+        // behaviour and causes partial (single-word) highlights.
+        if (!Platform.isIosApp) return;
+
+        // Registered through the plugin so they go when it unloads. Added
+        // directly, they outlived a disable and re-enable, and every touch
+        // then fired the long-press highlight once per copy.
+        this.plugin.registerDomEvent(
+            activeDocument,
+            "touchstart",
+            () => {
+                this.longPressTimer = window.setTimeout(() => {
+                    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+                    const sel = window.getSelection();
+
+                    if (view && view.getMode() === "preview" && sel?.toString().trim()) {
+                        void this.plugin.highlightSelection(view);
+                        this.hide();
+                    }
+                }, 600);
+            },
+            { passive: true }
+        );
+
+        this.plugin.registerDomEvent(
+            activeDocument,
+            "touchmove",
+            () => {
+                if (this.longPressTimer) {
+                    window.clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                }
+            },
+            { passive: true }
+        );
+
+        this.plugin.registerDomEvent(
+            activeDocument,
+            "touchend",
+            () => {
+                if (this.longPressTimer) {
+                    window.clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                }
+            },
+            { passive: true }
+        );
+    }
+
+    /**
+     * Called on every `selectionchange` event.
+     * On Android the event fires per-word during a drag, so we debounce it
+     * to wait for the selection to settle before showing the toolbar.
+     * On iOS/Desktop we keep the original instant behaviour.
+     */
+    handleSelection() {
+        if (Platform.isAndroidApp) {
+            // Debounce: wait for selection to stabilise
+            if (this._selectionDebounceTimer) {
+                window.clearTimeout(this._selectionDebounceTimer);
+            }
+            this._selectionDebounceTimer = window.setTimeout(() => {
+                this._selectionDebounceTimer = null;
+                this._doHandleSelection();
+            }, 300);
+        } else {
+            this._doHandleSelection();
+        }
+    }
+
+    /** Internal: actually process the current selection state. */
+    _doHandleSelection() {
+        const view = this.plugin.getActiveReadingView();
+        if (!view) {
+            this._selectionSnapshot = null;
+            this.hide();
+            return;
+        }
+
+        const sel = window.getSelection();
+        const snippet = sel?.toString() ?? "";
+
+        // Include this note's footnote preview, but never arbitrary hover previews.
+        const scope = sel?.anchorNode && this.plugin.getSelectionScope(view, sel.anchorNode);
+        const inView = !!scope && !!sel?.focusNode && scope.root.contains(sel.focusNode);
+
+        if (inView && snippet.trim() && sel && !sel.isCollapsed && sel.rangeCount > 0) {
+            // Guard: never show the toolbar inside code blocks, and never while
+            // a dialog is open — the note's selection stays live behind the
+            // settings dialog, and the toolbar would float on top of it.
+            if (activeDocument.querySelector(".modal-container, .modal-bg")) {
+                this.hide();
+                return;
+            }
+            let node: Node | null = sel.anchorNode;
+            while (node && node !== activeDocument.body) {
+                if (node.nodeName === "PRE" || node.nodeName === "CODE") {
+                    this.hide();
+                    return;
+                }
+                node = node.parentNode;
+            }
+
+            const range = sel.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+
+            // Cache the selection snapshot so toolbar actions can use it later
+            // (Android may clear the native selection when the user taps a button)
+            this._selectionSnapshot = {
+                text: snippet,
+                range: range.cloneRange(),
+            };
+
+            this.show(rect);
+        } else {
+            this._selectionSnapshot = null;
+            this.hide();
+        }
+    }
+
+    show(rect: DOMRect) {
+        if (!this.containerEl || !rect) return;
+        // A note can be moved to a popout window after the toolbar was built.
+        // Rebuild into the right document rather than showing it in the old one.
+        if (this.containerEl.ownerDocument !== this.targetDocument()) {
+            this.refresh();
+            if (!this.containerEl) return;
+        }
+
+        const pos = this.plugin.settings.toolbarPosition || "text";
+        const vertical = pos === "left" || pos === "right";
+
+        // Show + reset dynamic styles & classes
+        this.containerEl.setCssStyles({ display: "flex", top: "", bottom: "", left: "", right: "", transform: "" });
+        this.containerEl.toggleClass("reading-highlighter-vertical", vertical);
+
+        if (pos === "text") {
+            // Measured rather than assumed: the width depends on the buttons
+            // and swatches shown and on the theme's padding and borders.
+            const containerHeight = this.containerEl.offsetHeight || 50;
+            const containerWidth = this.containerEl.offsetWidth || 180;
+            const win = this.containerEl.ownerDocument.defaultView ?? window;
+            const margin = 10;
+            const clampLeft = (left: number) =>
+                Math.max(margin, Math.min(left, win.innerWidth - containerWidth - margin));
+
+            if (Platform.isAndroidApp) {
+                // ── Android: place toolbar BELOW the selection ──
+                // Android's native context menu (copy/paste/search) appears
+                // directly above the selection, so we place our toolbar below
+                // to avoid being hidden behind it.
+                const gap = 12;
+                let top = rect.bottom + gap;
+
+                // If not enough room below, try above with extra clearance
+                // for the native menu (~50px for the menu itself)
+                if (top + containerHeight > win.innerHeight - margin) {
+                    top = rect.top - containerHeight - 60;
+                }
+                if (top < margin) top = margin;
+
+                const left = clampLeft(rect.left + rect.width / 2 - containerWidth / 2);
+                this.containerEl.setCssStyles({ top: `${top}px`, left: `${left}px` });
+            } else {
+                // ── iOS / Desktop: place toolbar ABOVE the selection (original) ──
+                let top = rect.top - containerHeight - margin;
+                if (top < margin) top = rect.bottom + margin;
+
+                const left = clampLeft(rect.left + rect.width / 2 - containerWidth / 2);
+                this.containerEl.setCssStyles({ top: `${top}px`, left: `${left}px` });
+            }
+        } else if (pos === "top") {
+            this.containerEl.setCssStyles({ top: "80px", left: "50%", transform: "translateX(-50%)" });
+        } else if (pos === "bottom") {
+            this.containerEl.setCssStyles({ bottom: "100px", left: "50%", transform: "translateX(-50%)" });
+        } else if (pos === "left") {
+            this.containerEl.setCssStyles({ top: "50%", left: "10px", transform: "translateY(-50%)" });
+        } else if (pos === "right") {
+            this.containerEl.setCssStyles({ top: "50%", right: "10px", transform: "translateY(-50%)" });
+        }
+    }
+
+    hide() {
+        if (this.containerEl) {
+            this.containerEl.setCssStyles({ display: "none" });
+        }
+    }
+}
